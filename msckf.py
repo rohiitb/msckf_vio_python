@@ -237,17 +237,26 @@ class MSCKF(object):
         first few IMU readings.
         """
         # Initialize the gyro_bias given the current angular and linear velocity
-        ...
+        sum_ang_vel = np.zeros(3)
+        sum_linear_acc = np.zeros(3)
 
+        for one_imu_msg in self.imu_msg_buffer:
+            sum_ang_vel += one_imu_msg.angular_velocity
+            sum_linear_acc += one_imu_msg.linear_acceleration
+
+        self.state_server.imu_state.gyro_bias = sum_ang_vel / len(self.imu_msg_buffer)
         # Find the gravity in the IMU frame.
-        ...
+        gravity_imu = sum_linear_acc / len(self.imu_msg_buffer)
+        
         
         # Normalize the gravity and save to IMUState          
-        ...
+        grav_norm = np.linalg.norm(gravity_imu)
+        IMUState.gravity = np.array(0.,0., -grav_norm)
 
         # Initialize the initial orientation, so that the estimation
         # is consistent with the inertial frame.
-        ...
+        q0_i_w = from_two_vectors(gravity_imu, -IMUState.gravity)
+        self.state_server.imu_state.orientation = to_quaternion(to_rotation(q0_i_w).T)
 
     # Filter related functions
     # (batch_imu_processing, process_model, predict_new_state)
@@ -262,16 +271,29 @@ class MSCKF(object):
         # Execute process model.
         # Update the state info
         # Repeat until the time_bound is reached
-        ...
+        used_imu_msg_counter = 0
+
+        for one_imu_msg in self.imu_msg_buffer:
+            imu_time = one_imu_msg.timestamp
+            if imu_time < self.state_server.imu_state.timestamp:
+                used_imu_msg_counter += 1
+                continue
+            if imu_time > time_bound:
+                break
+            m_gyro = one_imu_msg.angular_velocity
+            m_acc = one_imu_msg.linear_acceleration
+
+            self.process_model(imu_time, m_gyro, m_acc)
+
         
         # Set the current imu id to be the IMUState.next_id
-        ...
-        
+        self.state_server.imu_state.id = IMUState.next_id
+
         # IMUState.next_id increments
-        ...
+        IMUState.next_id += 1
 
         # Remove all used IMU msgs.
-        ...
+        del self.imu_msg_buffer[:used_imu_msg_counter]
 
     def process_model(self, time, m_gyro, m_acc):
         """
