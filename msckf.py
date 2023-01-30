@@ -303,29 +303,61 @@ class MSCKF(object):
         Section III.A: The dynamics of the error IMU state following equation (2) in the "MSCKF" paper.
         """
         # Get the error IMU state
-        ...
+        imu_state = self.state_server.imu_state
+        gyro = m_gyro - imu_state.gyro_bias
+        acc = m_acc - imu_state.acc_bias
+        dt = time - imu_state.timestamp
 
-        # Compute discrete transition F, Q matrices in Appendix A in "MSCKF" paper
-        ...
+        # Compute discrete transition F, G matrices in Appendix A in "MSCKF" paper
+        F = np.zeros((21,21))
+        G = np.zeros((21,21))
+
+        F[:3, :3] = -skew(gyro)
+        F[3:6, :3] = -np.eye(3)
+        F[:3, 6:9] = -to_rotation(imu_state.orientation).T @ skew(acc)
+        F[9:12,6:9] = -to_rotation(imu_state.orientation).T
+        F[6:9,12:15] = np.eye(3)
+
+        G[:3, :3] = -np.eye(3)
+        G[3:6, 3:6] = np.eye(3)
+        G[6:9, 6:9] = -to_rotation(imu_state.orientation).T
+        G[9:12, 9:12] = np.eye(3)        
         
         # Approximate matrix exponential to the 3rd order, which can be 
         # considered to be accurate enough assuming dt is within 0.01s.
-        ...
+        Fdt = F * dt
+        Fdt_square = Fdt * Fdt
+        Fdt_cube = Fdt_square * Fdt
+        Phi = np.eye(21) + Fdt + 0.5*Fdt_square + (1./6.)*Fdt_cube
 
         # Propogate the state using 4th order Runge-Kutta
         self.predict_new_state(dt, gyro, acc)
 
         # Modify the transition matrix
-        ...
+        R_kk_1 = to_rotation(imu_state.orientation_null)
+        Phi[:3,:3] = to_rotation(imu_state.orientation) @ R_kk_1.T
+        u = R_kk_1 @ IMUState.gravity
+        s = np.linalg.inv(u.T @ u) @ u.T
+        A1 = Phi[:3,6:9]
+        w1 = skew(imu_state.velocity_null - imu_state.velocity) @ IMUState.gravity
+        Phi[:3,6:9] = A1 - (A1 @ u - w1) @ s
 
         # Propogate the state covariance matrix.
-        ...
+        Q = Phi @ G @ self.state_server.continuous_noise_cov @ G.T @ Phi.T * dt
+        self.state_server.state_cov = Phi @ self.state_server.state_cov @ Phi.T + Q
+
+        if len(self.state_server.cam_states) > 0:
+            self.state_server.state_cov = Phi @ self.state_server.state_cov @ Phi.T
 
         # Fix the covariance to be symmetric
-        ...
-        
+        self.state_server.state_cov = (self.state_server.state_cov + self.state_server.state_cov.T) / 2
+
         # Update the state correspondes to null space.
-        ...
+        imu_state.orientation_null = imu_state.orientation
+        imu_state.position_null = imu_state.position
+        imu_state.velocity_null = imu_state.velocity
+        imu_state.timestamp = time
+        
         
 
     def predict_new_state(self, dt, gyro, acc):
@@ -334,35 +366,57 @@ class MSCKF(object):
         """
         """Propogate the state using 4th order Runge-Kutta for equstion (1) in "MSCKF" paper"""
         # compute norm of gyro
-        ...
+        gyro_norm = np.linalg.norm(gyro)
         
         # Get the Omega matrix, the equation above equation (2) in "MSCKF" paper
-        ...
+        omega = np.zeros((4,4))
+        omega[:3,:3] = -skew(gyro)
+        omega[3,3:] = gyro
+        omega[:3,3] = -gyro
         
         # Get the orientation, velocity, position
-        ...
+        q = self.state_server.imu_state.orientation
+        v = self.state_server.imu_state.velocity
+        p = self.state_server.imu_state.position
         
         # Compute the dq_dt, dq_dt2 in equation (1) in "MSCKF" paper
-        ...
-        
+        if gyro_norm > 0.00005:
+            dq_dt = (np.cos(gyro_norm*dt*0.5) * np.eye(4) + ((1/gyro_norm)*np.sin(gyro_norm*dt*0.5))*omega) @ q
+            dq_dt2 = (np.cos(gyro_norm*dt*0.25) * np.eye(4) + ((1/gyro_norm)*np.sin(gyro_norm*dt*0.25))*omega) @ q
+        else:
+            dq_dt = (np.eye(4) + 0.5*dt*omega) * np.cos(gyro_norm*dt*0.5) @ q
+            dq_dt2 = (np.eye(4) + 0.25*dt*omega) * np.cos(gyro_norm*dt*0.25) @ q
+
+        dR_dt_T = to_rotation(dq_dt).T
+        dR_dt2_T = to_rotation(dq_dt2).T
+
         # Apply 4th order Runge-Kutta 
         # k1 = f(tn, yn)
-        ...
+        k1_v_dot = to_rotation(q).T @ acc + IMUState.gravity
+        k1_p_dot = v
 
         # k2 = f(tn+dt/2, yn+k1*dt/2)
-        ...
+        k1_v = v + k1_v_dot*dt/2
+        k2_v_dot = dR_dt2_T @ acc + IMUState.gravity
+        k2_p_dot = k1_v
         
         # k3 = f(tn+dt/2, yn+k2*dt/2)
-        ...
+        k2_v = v + k2_v_dot*dt/2
+        k3_v_dot = dR_dt2_T @ acc + IMUState.gravity
+        k3_p_dot = k2_v
         
         # k4 = f(tn+dt, yn+k3*dt)
-        ...
+        k3_v = v + k3_v_dot*dt
+        k4_v_dot = dR_dt_T @ acc + IMUState.gravity
+        k4_p_dot = k3_v
 
         # yn+1 = yn + dt/6*(k1+2*k2+2*k3+k4)
-        ...
+        q = dq_dt
+        q = quaternion_normalize(q)
 
         # update the imu state
-        ...
+        v = v + dt/6*(k1_v_dot + 2*k2_v_dot + 2*k3_v_dot + k4_v_dot)
+        p = p + dt/6*(k1_p_dot + 2*k2_p_dot + 2*k3_p_dot + k4_p_dot)
 
     
     def state_augmentation(self, time):
