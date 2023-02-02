@@ -482,11 +482,17 @@ class MSCKF(object):
 
         # add all features in the feature_msg to self.map_server
         for one_feature in feature_msg.features:
-            if one_feature in self.map_server:
+            if one_feature.id not in self.map_server:
+                new_feature = Feature(one_feature.id, self.optimization_config)
+                new_feature.observations[cur_state_id] = np.array([one_feature.u0, one_feature.v0, one_feature.u1, one_feature.v1])
+                self.map_server[one_feature.id] = new_feature
+            else:
+                self.map_server[one_feature.id].observations[cur_state_id] = np.array([one_feature.u0, one_feature.v0, one_feature.u1, one_feature.v1])
+                tracked_feature_num += 1
 
 
         # update the tracking rate
-        ...
+        self.tracking_rate = tracked_feature_num / cur_feature_num
 
     def measurement_jacobian(self, cam_state_id, feature_id):
         """
@@ -615,25 +621,60 @@ class MSCKF(object):
         # Decompose the final Jacobian matrix to reduce computational
         # complexity.
         if H.shape[0] > H.shape[1]:
-            H_sparse = 
+            Q, R = np.linalg.qr(H, mode='reduced')
+            H_thin = R
+            r_thin = Q.T @ r
+        else:
+            H_thin = H
+            r_thin = r
+
 
         # Compute the Kalman gain.
-        ...
+        P = self.state_server.state_cov
+        S = H_thin @ P @ H_thin.T + self.config.observation_noise * np.eye(H_thin.shape[0])
+        K_transpose = np.linalg.solve(H_thin @ P, np.linalg.cholesky(S).T) 
+        # K_transpose = np.linalg.solve(S, H_thin @ P) 
+
+        K = K_transpose.T
 
         # Compute the error of the state.
-        ...
+        delta_x = K @ r_thin
         
         # Update the IMU state.
-        ...
+        delta_x_imu = delta_x[:21]
 
+        if np.linalg.norm(delta_x_imu[6:9]) > 0.5 or np.linalg.norm(delta_x_imu[12:15]) > 1.0:
+            print("Delta velocity : ", np.linalg.norm(delta_x_imu[6:9]))
+            print("Delta position : ", np.linalg.norm(delta_x_imu[12:15]))
+            print("UPDATE CHANGE IS TOO LARGE")
+
+        dq_imu = small_angle_quaternion(delta_x_imu[:3])
+        self.state_server.imu_state.orientation = quaternion_multiplication(dq_imu, self.state_server.imu_state.orientation)
+        self.state_server.imu_state.gyro_bias += delta_x_imu[3:6]
+        self.state_server.imu_state.velocity += delta_x_imu[6:9]
+        self.state_server.imu_state.acc_bias += delta_x_imu[9:12]
+        self.state_server.imu_state.position += delta_x_imu[12:15]
+
+        dq_extrinsic = small_angle_quaternion(delta_x_imu[15:18])
+        self.state_server.imu_state.R_imu_cam0 = to_rotation(dq_extrinsic) @ self.state_server.imu_state.R_imu_cam0
+        self.state_server.imu_state.t_cam0_imu += delta_x_imu[18:21]
+        
         # Update the camera states.
-        ...
+        for i, (cam_id, cam_state) in enumerate(
+                self.state_server.cam_states.items()):
+            delta_x_cam = delta_x[21+i*6:27+i*6]
+            dq_cam = small_angle_quaternion(delta_x_cam[:3])
+            cam_state.orientation = quaternion_multiplication(
+                dq_cam, cam_state.orientation)
+            cam_state.position += delta_x_cam[3:]
+       
 
         # Update state covariance.
-        ...
+        I_KH = np.identity(len(K)) - K @ H_thin
+        state_cov = I_KH @ self.state_server.state_co
 
         # Fix the covariance to be symmetric
-        ...
+        self.state_server.state_cov = (state_cov + state_cov.T) / 2
 
     def gating_test(self, H, r, dof):
         P1 = H @ self.state_server.state_cov @ H.T
