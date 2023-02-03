@@ -5,7 +5,7 @@ MSCKF (Multi-State Constraint Kalman Filter) is an EKF based **tightly-coupled**
 
 
 For algorithm details, please refer to:
-* Robust Stereo Visual Inertial Odometry for Fast Autonomous Flight, Ke Sun et al. (2017)
+* Robust Stereo Visual Inertial Odometry for Fast Autonomous Flight, Ke Sun et al. (2017) [S-MSCKF](https://arxiv.org/abs/1712.00036)
 * A Multi-State Constraint Kalman Filterfor Vision-aided Inertial Navigation, Anastasios I. Mourikis et al. (2006)  
 
 ## Requirements
