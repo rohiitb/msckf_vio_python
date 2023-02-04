@@ -16,6 +16,10 @@ For algorithm details, please refer to:
 * Robust Stereo Visual Inertial Odometry for Fast Autonomous Flight, Ke Sun et al. (2017) [Link](https://arxiv.org/abs/1712.00036)
 * A Multi-State Constraint Kalman Filterfor Vision-aided Inertial Navigation, Anastasios I. Mourikis et al. (2006) [Link](https://www-users.cse.umn.edu/~stergios/papers/ICRA07-MSCKF.pdf) 
 
+### Structure
+
+<img src="./imgs/structure.PNG">
+
 ## Requirements
 * Python 3.6+
 * numpy
