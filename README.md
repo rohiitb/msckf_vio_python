@@ -11,7 +11,7 @@ Another algorithm for getting VIO is implemented by using Error State Kalman fil
 
 The main difference between ESKF and MSCKF is in how they handle the uncertainty and measurement noise. ESKF models the uncertainty in the 6 DOF pose as a covariance matrix and updates it using the Kalman filter framework. This approach works well when the object moves slowly and the IMU measurements are relatively stable. However, when the object moves rapidly or experiences high levels of noise, the covariance matrix can grow quickly and lead to drift in the estimated pose.
 
-MSRKF, on the other hand, maintains a set of states representing the camera poses and IMU states, and a set of constraints derived from the feature observations and IMU measurements. The algorithm uses these constraints to eliminate inconsistencies and produce a more accurate and robust estimate of the pose. MSRKF is better suited to handling rapid motion and high levels of noise compared to ESKF.
+MSCKF, on the other hand, maintains a set of states representing the camera poses and IMU states, and a set of constraints derived from the feature observations and IMU measurements. The algorithm uses these constraints to eliminate inconsistencies and produce a more accurate and robust estimate of the pose. MSRKF is better suited to handling rapid motion and high levels of noise compared to ESKF.
 
 
 For algorithm details, please refer to:
