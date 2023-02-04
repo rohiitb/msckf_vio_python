@@ -1,6 +1,8 @@
 # msckf_vio_python
 MSCKF (Multi-State Constraint Kalman Filter) implementation in Python
 
+<img src="./imgs/msckf_gif.gif">
+
 MSCKF (Multi-State Constraint Kalman Filter) is an EKF based **tightly-coupled** visual-inertial odometry algorithm. [S-MSCKF](https://arxiv.org/abs/1712.00036) is MSCKF's stereo version. This project is a Python reimplemention of S-MSCKF, the code is directly translated from official C++ implementation [KumarRobotics/msckf_vio](https://github.com/KumarRobotics/msckf_vio).  
 <br>
 Another algorithm for getting VIO is implemented by using Error State Kalman filter (ESKF) [here](https://github.com/rohiitb/Quadrotor_planning_and_control).
